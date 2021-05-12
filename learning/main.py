@@ -52,7 +52,7 @@ def main():
     parser.add_argument('--loss_weights', default='none', help='[none, proportional, sqrt] how to weight the loss function')
 
     # Learning process arguments
-    parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
+    parser.add_argument('--cuda', default=0, type=int, help='Bool, use cuda')
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
     parser.add_argument('--test_nth_epoch', default=1, type=int, help='Test each n-th epoch during training')
     parser.add_argument('--save_nth_epoch', default=1, type=int, help='Save model each n-th epoch during training')
@@ -176,7 +176,6 @@ def main():
     def train():
         """ Trains for one epoch """
         model.train()
-
         loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, collate_fn=spg.eccpc_collate, num_workers=args.nworkers, shuffle=True, drop_last=True)
         if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
 
@@ -198,10 +197,9 @@ def main():
 
             optimizer.zero_grad()
             t0 = time.time()
-
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
             outputs = model.ecc(embeddings)
-            
+            print('output_size', outputs.shape, 'target_size:', targets.shape, 'emb_size:', embeddings.shape, 'cloud_data_shape:', clouds_data[2].shape, 'cloud diameter:', clouds_data[-1].shape)
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
 
             loss.backward()
