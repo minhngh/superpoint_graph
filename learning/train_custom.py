@@ -414,7 +414,7 @@ def create_model(args, dbinfo):
     if not 'use_pyg' in args:
         args.use_pyg = 0
 
-    model = GCNNet(29, 128, 4, 8)
+    model = GCNNet(29, 128, 6, 8)
     print('Total number of parameters: {}'.format(sum([p.numel() for p in model.parameters()])))
     print(model)    
     if args.cuda: 
