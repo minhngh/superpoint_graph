@@ -171,7 +171,7 @@ def main():
     train_dataset, test_dataset, valid_dataset, scaler = create_dataset(args)
 
     print('Train dataset: %i elements - Test dataset: %i elements - Validation dataset: %i elements' % (len(train_dataset),len(test_dataset),len(valid_dataset)))
-
+    ptnCloudEmbedder = pointnet.CloudEmbedder(args)
     scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_decay, last_epoch=args.start_epoch-1)
 
 
@@ -189,23 +189,27 @@ def main():
         t0 = time.time()
 
         # iterate over dataset in batches
-        for bidx, (targets, edgelist, clouds_data) in enumerate(loader):
+        for bidx, (targets, edgelist, feats, clouds_data) in enumerate(loader):
             t_loader = 1000*(time.time()-t0)
 
             label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1)
             if args.cuda:
                 label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
+                feats = feats.cuda()
+                edgelist = edgelist.cuda()
             else:
                 label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
 
             optimizer.zero_grad()
             t0 = time.time()
-            outputs = model(clouds_data[-1], edgelist)
-            print('output_size', outputs.shape, 'target_size:', targets.shape, 'cloud_data_shape:', clouds_data[2].shape, 'edgelist_size:', edgelist.shape)
+            embeddings = ptnCloudEmbedder.run(model, *clouds_data)
+            feats = torch.cat((feats, embeddings), dim = 1)
+            outputs = model(feats, edgelist)
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
 
             loss.backward()
-
+            ptnCloudEmbedder.bw_hook()
+            
             if args.grad_clip>0:
                 for p in model.parameters():
                     p.grad.data.clamp_(-args.grad_clip, args.grad_clip)
@@ -241,14 +245,17 @@ def main():
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
 
         # iterate over dataset in batches
-        for bidx, (targets, edgelist, clouds_data) in enumerate(loader):
+        for bidx, (targets, edgelist, feats, clouds_data) in enumerate(loader):
             label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
             if args.cuda:
                 label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
+                feats = feats.cuda()
+                edgelist = edgelist.cuda()
             else:
                 label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
-
-            outputs = model(clouds_data[-1], edgelist)
+            embeddings = ptnCloudEmbedder.run(model, *clouds_data)
+            feats = torch.cat((feats, embeddings), dim = 1)
+            outputs = model(feats, edgelist)
             
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
             loss_meter.add(loss.item()) 
@@ -276,11 +283,14 @@ def main():
             if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
 
             # iterate over dataset in batches
-            for bidx, (targets, edgelist, clouds_data) in enumerate(loader):
+            for bidx, (targets, edgelist, feats, clouds_data) in enumerate(loader):
                 label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
-
+                if args.cuda:
+                    feats = feats.cuda()
+                    edgelist = edgelist.cuda()
                 embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-                outputs = model.ecc(embeddings)
+                feats = torch.cat((feats, embeddings), dim = 1)
+                outputs = model(feats, edgelist)
 
                 fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
                 collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy()))
@@ -374,15 +384,14 @@ def main():
     
     # Final evaluation
     if args.test_multisamp_n>0 and 'test' in args.db_test_name:
-        # acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
-        # print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
-        # with h5py.File(os.path.join(args.odir, 'predictions_'+args.db_test_name+'.h5'), 'w') as hf:
-        #     for fname, o_cpu in predictions_test.items():
-        #         hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
-        # with open(os.path.join(args.odir, 'scores_'+args.db_test_name+'.json'), 'w') as outfile:
-        #     json.dump([{'epoch': args.start_epoch, 'acc_test': acc_test, 'oacc_test': oacc_test, 'avg_iou_test': avg_iou_test, 'per_class_iou_test': per_class_iou_test, 'avg_acc_test': avg_acc_test}], outfile)
-        # np.save(os.path.join(args.odir, 'pointwise_cm.npy'), confusion_matrix)
-        pass
+        acc_test, oacc_test, avg_iou_test, per_class_iou_test, predictions_test, avg_acc_test, confusion_matrix = eval_final()
+        print('-> Multisample {}: Test accuracy: {}, \tTest oAcc: {}, \tTest avgIoU: {}, \tTest mAcc: {}'.format(args.test_multisamp_n, acc_test, oacc_test, avg_iou_test, avg_acc_test))
+        with h5py.File(os.path.join(args.odir, 'predictions_'+args.db_test_name+'.h5'), 'w') as hf:
+            for fname, o_cpu in predictions_test.items():
+                hf.create_dataset(name=fname, data=o_cpu) #(0-based classes)
+        with open(os.path.join(args.odir, 'scores_'+args.db_test_name+'.json'), 'w') as outfile:
+            json.dump([{'epoch': args.start_epoch, 'acc_test': acc_test, 'oacc_test': oacc_test, 'avg_iou_test': avg_iou_test, 'per_class_iou_test': per_class_iou_test, 'avg_acc_test': avg_acc_test}], outfile)
+        np.save(os.path.join(args.odir, 'pointwise_cm.npy'), confusion_matrix)
 
 def resume(args, dbinfo):
     """ Loads model and optimizer state from a previous checkpoint. """
@@ -414,7 +423,8 @@ def create_model(args, dbinfo):
     if not 'use_pyg' in args:
         args.use_pyg = 0
 
-    model = GCNNet(29, 128, 6, 8)
+    model = GCNNet(38, 128, 6, 8)
+    model.ptn = pointnet.PointNet(args.ptn_widths[0], args.ptn_widths[1], args.ptn_widths_stn[0], args.ptn_widths_stn[1], dbinfo['node_feats'], args.ptn_nfeat_stn, prelast_do=args.ptn_prelast_do)
     print('Total number of parameters: {}'.format(sum([p.numel() for p in model.parameters()])))
     print(model)    
     if args.cuda: 

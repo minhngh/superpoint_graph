@@ -131,9 +131,9 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
             clouds_global = np.concatenate(clouds_global)
 
         # return np.array(G.vs['t']), np.array(G.vs['f']), clouds_meta, clouds_flag, clouds, clouds_global
-        cloud_means = np.mean(clouds, axis = -1)
-        cloud_stds  = np.std(clouds, axis = -1)
-        return np.array(G.vs['t']), np.array(G.vs['f']), G.get_edgelist(), clouds_meta, clouds_flag, cloud_means, cloud_stds, clouds_global
+        # cloud_means = np.mean(clouds, axis = -1)
+        # cloud_stds  = np.std(clouds, axis = -1)
+        return np.array(G.vs['t']), np.array(G.vs['f']), G.get_edgelist(), clouds_meta, clouds_flag, clouds, clouds_global
 
     # Don't use the graph if it doesn't have edges.
     else:
@@ -148,14 +148,13 @@ def cloud_edge_feats(edgeattrs):
 def eccpc_collate(batch):
     """ Collates a list of dataset samples into a single batch (adapted in ecc.graph_info_collate_classification())
     """
-    targets, node_feats, edgelist, clouds_meta, clouds_flag, cloud_means, cloud_stds, clouds_global = list(zip(*batch))
+    targets, node_feats, edgelist, clouds_meta, clouds_flag, clouds, clouds_global = list(zip(*batch))
 
     targets = torch.cat([torch.from_numpy(t) for t in targets if t is not None], 0).long()
     feats = torch.cat([torch.from_numpy(f) for f in node_feats], dim = 0)
 
     if len(clouds_meta[0]) > 0:
-        cloud_means = torch.cat([torch.from_numpy(f) for f in cloud_means if f is not None], 0)
-        cloud_stds = torch.cat([torch.from_numpy(f) for f in cloud_stds if f is not None], 0)
+        clouds = torch.cat([torch.from_numpy(f) for f in clouds if f is not None], 0)
         clouds_global = torch.cat([torch.from_numpy(f) for f in clouds_global if f is not None], 0)
         clouds_flag = torch.cat([torch.from_numpy(f) for f in clouds_flag if f is not None], 0)
         clouds_meta = [item for sublist in clouds_meta if sublist is not None for item in sublist]
@@ -171,8 +170,8 @@ def eccpc_collate(batch):
     edgelist = torch.cat(_edgelist, dim = 0).long().T
         
 
-    cloud_feats = torch.cat((feats, cloud_means, cloud_stds, clouds_global.unsqueeze(1)), dim = 1)
-    return targets, edgelist, (clouds_meta, clouds_flag, cloud_feats)
+    # cloud_feats = torch.cat((feats, cloud_means, cloud_stds, clouds_global.unsqueeze(1)), dim = 1)
+    return targets, edgelist, feats, (clouds_meta, clouds_flag, clouds, clouds_global)
 
 
 ############### POINT CLOUD PROCESSING ##########
