@@ -16,7 +16,8 @@ class GCNNet(nn.Module):
         for i in range(n_layers - 1):
             modules.append((GCNConv(in_channels if i == 0 else hidden_dims[i - 1], hidden_dims[i]), 'x, edge_index -> x'))
             modules.append(nn.ReLU(inplace = True))
-            modules.append(nn.Dropout(0.5))
+            if i != 0:
+                modules.append(nn.Dropout(0.5))
         modules.append((GCNConv(hidden_dims[-1], n_classes), 'x, edge_index -> x'))
         self.net = Sequential('x, edge_index', modules)
     def forward(self, x, edge_index):

@@ -27,15 +27,18 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.autograd import Variable
 import torchnet as tnt
+# from torch_geometric.data import Data, DataLoader
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(DIR_PATH,'..'))
 
-from learning import spg
+from learning import spg_custom as spg
 from learning import graphnet
 from learning import pointnet
 from learning import metrics
 from compgcn.model.models import CompGCN_ConvE
+
+from gcn import GCNNet
 
 def main():
     parser = argparse.ArgumentParser(description='Large-scale Point Cloud Semantic Segmentation with Superpoint Graphs')
@@ -157,7 +160,7 @@ def main():
 
     # Decide on the dataset
     if args.dataset=='sema3d':
-        import sema3d_dataset
+        import sema3d_custom as sema3d_dataset
         dbinfo = sema3d_dataset.get_info(args)
         create_dataset = sema3d_dataset.get_datasets
     elif args.dataset=='s3dis':
@@ -231,6 +234,7 @@ def main():
             loss.backward()
             ptnCloudEmbedder.bw_hook()
 
+            
             if args.grad_clip>0:
                 for p in model.parameters():
                     p.grad.data.clamp_(-args.grad_clip, args.grad_clip)

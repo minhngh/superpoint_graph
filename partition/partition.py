@@ -108,82 +108,84 @@ for folder in folders:
             cloud_file  = cloud_folder     + file_name
             fea_file    = fea_folder       + file_name + '.h5'
             spg_file    = spg_folder       + file_name + '.h5'
-        
-        i_file = i_file + 1
-        print(str(i_file) + " / " + str(n_files) + "---> "+file_name)
-        #--- build the geometric feature file h5 file ---
-        if os.path.isfile(fea_file) and not args.overwrite:
-            print("    reading the existing feature file...")
-            geof, xyz, rgb, graph_nn, labels = read_features(fea_file)
-        else :
-            print("    creating the feature file...")
-            #--- read the data files and compute the labels---
-            if args.dataset=='s3dis':
-                xyz, rgb, labels, objects = read_s3dis_format(data_file)
-                if args.voxel_width > 0:
-                    xyz, rgb, labels, dump = libply_c.prune(xyz.astype('f4'), args.voxel_width, rgb.astype('uint8'), labels.astype('uint8'), np.zeros(1, dtype='uint8'), n_labels, 0)
-            elif args.dataset=='sema3d':
-                label_file = data_folder + file_name + ".labels"
-                has_labels = (os.path.isfile(label_file))
-                if (has_labels):
-                    xyz, rgb, labels = read_semantic3d_format(data_file, n_labels, label_file, args.voxel_width, args.ver_batch)
-                else:
-                    xyz, rgb = read_semantic3d_format(data_file, 0, '', args.voxel_width, args.ver_batch)
-                    labels = []
-            elif args.dataset=='custom_dataset':
-                #implement in provider.py your own read_custom_format outputing xyz, rgb, labels
-                #example for ply files
-                xyz, rgb, labels = read_ply(data_file)
-                #another one for las files without rgb
-                xyz = read_las(data_file)
-                if args.voxel_width > 0:
-                    #an example of pruning without labels
-                    xyz, rgb, labels = libply_c.prune(xyz, args.voxel_width, rgb, np.array(1,dtype='u1'), 0)
-                    #another one without rgb information nor labels
-                    xyz = libply_c.prune(xyz, args.voxel_width, np.zeros(xyz.shape,dtype='u1'), np.array(1,dtype='u1'), 0)[0]
-                #if no labels available simply set here labels = []
-                #if no rgb available simply set here rgb = [] and make sure to not use it later on
-            start = timer()
-            #---compute 10 nn graph-------
-            graph_nn, target_fea = compute_graph_nn_2(xyz, args.k_nn_adj, args.k_nn_geof)
-            #---compute geometric features-------
-            geof = libply_c.compute_geof(xyz, target_fea, args.k_nn_geof).astype('float32')
-            end = timer()
-            times[0] = times[0] + end - start
-            del target_fea
-            write_features(fea_file, geof, xyz, rgb, graph_nn, labels)
-        #--compute the partition------
-        sys.stdout.flush()
-        if os.path.isfile(spg_file) and not args.overwrite:
-            print("    reading the existing superpoint graph file...")
-            graph_sp, components, in_component = read_spg(spg_file)
-        else:
-            print("    computing the superpoint graph...")
-            #--- build the spg h5 file --
-            start = timer()
-            if args.dataset=='s3dis':
-                features = np.hstack((geof, rgb/255.)).astype('float32')#add rgb as a feature for partitioning
-                features[:,3] = 2. * features[:,3] #increase importance of verticality (heuristic)
-            elif args.dataset=='sema3d':
-                 features = geof
-                 geof[:,3] = 2. * geof[:, 3]
-            elif args.dataset=='custom_dataset':
-                #choose here which features to use for the partition
-                 features = geof
-                 geof[:,3] = 2. * geof[:, 3]
-                
-            graph_nn["edge_weight"] = np.array(1. / ( args.lambda_edge_weight + graph_nn["distances"] / np.mean(graph_nn["distances"])), dtype = 'float32')
-            print("        minimal partition...")
-            components, in_component = libcp.cutpursuit(features, graph_nn["source"], graph_nn["target"]
-                                         , graph_nn["edge_weight"], args.reg_strength)
-            components = np.array(components, dtype = 'object')
-            end = timer()
-            times[1] = times[1] + end - start
-            print("        computation of the SPG...")
-            start = timer()
-            graph_sp = compute_sp_graph(xyz, args.d_se_max, in_component, components, labels, n_labels)
-            end = timer()
-            times[2] = times[2] + end - start
-            write_spg(spg_file, graph_sp, components, in_component)
-        
-        print("Timer : %5.1f / %5.1f / %5.1f " % (times[0], times[1], times[2]))
+        try:
+            i_file = i_file + 1
+            print(str(i_file) + " / " + str(n_files) + "---> "+file_name)
+            #--- build the geometric feature file h5 file ---
+            if os.path.isfile(fea_file) and not args.overwrite:
+                print("    reading the existing feature file...")
+                geof, xyz, rgb, graph_nn, labels = read_features(fea_file)
+            else :
+                print("    creating the feature file...")
+                #--- read the data files and compute the labels---
+                if args.dataset=='s3dis':
+                    xyz, rgb, labels, objects = read_s3dis_format(data_file)
+                    if args.voxel_width > 0:
+                        xyz, rgb, labels, dump = libply_c.prune(xyz.astype('f4'), args.voxel_width, rgb.astype('uint8'), labels.astype('uint8'), np.zeros(1, dtype='uint8'), n_labels, 0)
+                elif args.dataset=='sema3d':
+                    label_file = data_folder + file_name + ".labels"
+                    has_labels = (os.path.isfile(label_file))
+                    if (has_labels):
+                        xyz, rgb, labels = read_semantic3d_format(data_file, n_labels, label_file, args.voxel_width, args.ver_batch)
+                    else:
+                        xyz, rgb = read_semantic3d_format(data_file, 0, '', args.voxel_width, args.ver_batch)
+                        labels = []
+                elif args.dataset=='custom_dataset':
+                    #implement in provider.py your own read_custom_format outputing xyz, rgb, labels
+                    #example for ply files
+                    xyz, rgb, labels = read_ply(data_file)
+                    #another one for las files without rgb
+                    xyz = read_las(data_file)
+                    if args.voxel_width > 0:
+                        #an example of pruning without labels
+                        xyz, rgb, labels = libply_c.prune(xyz, args.voxel_width, rgb, np.array(1,dtype='u1'), 0)
+                        #another one without rgb information nor labels
+                        xyz = libply_c.prune(xyz, args.voxel_width, np.zeros(xyz.shape,dtype='u1'), np.array(1,dtype='u1'), 0)[0]
+                    #if no labels available simply set here labels = []
+                    #if no rgb available simply set here rgb = [] and make sure to not use it later on
+                start = timer()
+                #---compute 10 nn graph-------
+                graph_nn, target_fea = compute_graph_nn_2(xyz, args.k_nn_adj, args.k_nn_geof)
+                #---compute geometric features-------
+                geof = libply_c.compute_geof(xyz, target_fea, args.k_nn_geof).astype('float32')
+                end = timer()
+                times[0] = times[0] + end - start
+                del target_fea
+                write_features(fea_file, geof, xyz, rgb, graph_nn, labels)
+            #--compute the partition------
+            sys.stdout.flush()
+            if os.path.isfile(spg_file) and not args.overwrite:
+                print("    reading the existing superpoint graph file...")
+                graph_sp, components, in_component = read_spg(spg_file)
+            else:
+                print("    computing the superpoint graph...")
+                #--- build the spg h5 file --
+                start = timer()
+                if args.dataset=='s3dis':
+                    features = np.hstack((geof, rgb/255.)).astype('float32')#add rgb as a feature for partitioning
+                    features[:,3] = 2. * features[:,3] #increase importance of verticality (heuristic)
+                elif args.dataset=='sema3d':
+                    features = geof
+                    geof[:,3] = 2. * geof[:, 3]
+                elif args.dataset=='custom_dataset':
+                    #choose here which features to use for the partition
+                    features = geof
+                    geof[:,3] = 2. * geof[:, 3]
+                    
+                graph_nn["edge_weight"] = np.array(1. / ( args.lambda_edge_weight + graph_nn["distances"] / np.mean(graph_nn["distances"])), dtype = 'float32')
+                print("        minimal partition...")
+                components, in_component = libcp.cutpursuit(features, graph_nn["source"], graph_nn["target"]
+                                            , graph_nn["edge_weight"], args.reg_strength)
+                components = np.array(components, dtype = 'object')
+                end = timer()
+                times[1] = times[1] + end - start
+                print("        computation of the SPG...")
+                start = timer()
+                graph_sp = compute_sp_graph(xyz, args.d_se_max, in_component, components, labels, n_labels)
+                end = timer()
+                times[2] = times[2] + end - start
+                write_spg(spg_file, graph_sp, components, in_component)
+            
+            print("Timer : %5.1f / %5.1f / %5.1f " % (times[0], times[1], times[2]))
+        except:
+            print('ERROR:', file_name)

@@ -16,6 +16,7 @@ import torch
 import ecc
 import h5py
 from sklearn import preprocessing
+from sklearn.preprocessing import StandardScaler
 import igraph
 
 

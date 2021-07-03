@@ -81,7 +81,7 @@ def spg_reader(args, fname, incl_dir_in_name=False):
     node_att['volume'] = np.maximum(0, f['sp_volume'][:] ** 2)
     node_att['surface'] = np.maximum(0, f['sp_surface'][:] ** 2)
     node_att['size'] = f['sp_point_count'][:]
-    print('size of node attr:', len(node_att['xyz']))
+    # print('size of node attr:', len(node_att['xyz']))
     edges = np.concatenate([ f['source'][:], f['target'][:] ], axis=1).astype(np.int64)
 
     edge_att = {}
@@ -147,6 +147,7 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
         clouds_meta, clouds_flag = [], [] # meta: textual id of the superpoint; flag: 0/-1 if no cloud because too small
         clouds, clouds_global = [], [] # clouds: point cloud arrays; clouds_global: diameters before scaling
 
+        # print('size of G:', G.vcount())
         for s in range(G.vcount()):
             cloud, diam = load_superpoint(args, db_path + '/parsed/' + fname + '.h5', G.vs[s]['v'], train, test_seed_offset)
             if cloud is not None:

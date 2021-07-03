@@ -199,7 +199,6 @@ def main():
             t0 = time.time()
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
             outputs = model.ecc(embeddings)
-            print('embeddings_size:', embeddings.shape, ' size', clouds_data[1].shape)
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
 
             loss.backward()
