@@ -122,6 +122,7 @@ def compute_sp_graph(xyz, d_max, in_component, components, labels, n_labels):
     #marks where the edges change components iot compting them by blocks
     jump_edg = np.vstack((0, np.argwhere(np.diff(edge_comp_index)) + 1, n_edg)).flatten()
     n_sedg = len(jump_edg) - 1
+    print('N_COM:', n_com)
     #---set up the edges descriptors---
     graph = dict([("is_nn", False)])
     graph["sp_centroids"] = np.zeros((n_com, 3), dtype='float32')

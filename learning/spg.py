@@ -45,7 +45,6 @@ def spg_edge_features(edges, node_att, edge_att, args):
             columns.append(attr)
         else:
             raise NotImplementedError
-
     return np.concatenate(columns, axis=1).astype(np.float32)
 
 def scaler01(trainlist, testlist, transform_train=True, validlist = []):
@@ -82,7 +81,7 @@ def spg_reader(args, fname, incl_dir_in_name=False):
     node_att['volume'] = np.maximum(0, f['sp_volume'][:] ** 2)
     node_att['surface'] = np.maximum(0, f['sp_surface'][:] ** 2)
     node_att['size'] = f['sp_point_count'][:]
-
+    print('size of node attr:', len(node_att['xyz']))
     edges = np.concatenate([ f['source'][:], f['target'][:] ], axis=1).astype(np.int64)
 
     edge_att = {}

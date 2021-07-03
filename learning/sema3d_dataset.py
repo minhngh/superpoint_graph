@@ -19,8 +19,8 @@ import spg
 
 def get_datasets(args, test_seed_offset=0):
 
-    train_names = ['bildstein_station1', 'bildstein_station5', 'domfountain_station1', 'domfountain_station3', 'neugasse_station1', 'sg27_station1', 'sg27_station2', 'sg27_station5', 'sg27_station9', 'sg28_station4', 'untermaederbrunnen_station1']
-    valid_names = ['bildstein_station3', 'domfountain_station2', 'sg27_station4', 'untermaederbrunnen_station3']
+    train_names = ['bildstein_station1']
+    valid_names = ['bildstein_station1']
 
     if args.db_train_name == 'train':
         trainset = ['train/' + f for f in train_names]
