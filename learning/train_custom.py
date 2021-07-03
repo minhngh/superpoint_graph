@@ -36,7 +36,7 @@ from learning import spg_custom as spg
 from learning import graphnet
 from learning import pointnet
 from learning import metrics
-from compgcn.model.models import CompGCN_ConvE
+from compgcn.models import CompGCN_ConvE
 
 from gcn import GCNNet
 
@@ -56,7 +56,7 @@ def main():
     parser.add_argument('--loss_weights', default='none', help='[none, proportional, sqrt] how to weight the loss function')
 
     # Learning process arguments
-    parser.add_argument('--cuda', default=0, type=int, help='Bool, use cuda')
+    parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
     parser.add_argument('--test_nth_epoch', default=1, type=int, help='Test each n-th epoch during training')
     parser.add_argument('--save_nth_epoch', default=1, type=int, help='Save model each n-th epoch during training')
