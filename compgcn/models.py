@@ -1,7 +1,8 @@
-from helper import *
-from compgcn_conv import CompGCNConv
-from compgcn_conv_basis import CompGCNConvBasis
+from .helper import *
+from .compgcn_conv import CompGCNConv
+from .compgcn_conv_basis import CompGCNConvBasis
 
+import torch
 class BaseModel(torch.nn.Module):
 	def __init__(self, params):
 		super(BaseModel, self).__init__()
@@ -19,7 +20,7 @@ class CompGCNBase(BaseModel):
 
 		self.p.gcn_dim		= self.p.embed_dim if self.p.gcn_layer == 1 else self.p.gcn_dim
 
-		self.device		= params.device
+		self.device		= torch.device('cuda' if params.cuda else 'cpu')
 		# if self.p.num_bases > 0:
 		# 	self.init_rel  = get_param((self.p.num_bases,   self.p.init_dim))
 		# else:

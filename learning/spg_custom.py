@@ -182,7 +182,7 @@ def eccpc_collate(batch):
 
     targets = torch.cat([torch.from_numpy(t) for t in targets if t is not None], 0).long()
     graphs = [graph for graph in graphs if graph is not None]
-    GIs = [ecc.GraphConvInfo(graphs, cloud_edge_feats)]
+    # GIs = [ecc.GraphConvInfo(graphs, cloud_edge_feats)]
 
     if len(clouds_meta[0]) > 0:
         clouds = torch.cat([torch.from_numpy(f) for f in clouds if f is not None], 0)
@@ -191,15 +191,18 @@ def eccpc_collate(batch):
         clouds_meta = [item for sublist in clouds_meta if sublist is not None for item in sublist]
     
     _edgelist = []
+    _edgefeats = []
     acc_node_size = 0
-    for i in range(len(graphs)):
-        edges = torch.Tensor(graphs[i].get_edgelist())
+    for graph in graphs:
+        edges = torch.Tensor(graph.get_edgelist())
         edges += acc_node_size
-        acc_node_size += graphs[i].vcount()
+        acc_node_size += graph.vcount()
         _edgelist.append(edges)
-    edgelist = torch.cat(_edgelist, dim = 0).long().T
 
-    return targets, GIs, edgelist, (clouds_meta, clouds_flag, clouds, clouds_global)
+        _edgefeats.append(graph.es['f'])
+    edgelist = torch.cat(_edgelist, dim = 0).long().T
+    edgefeats = torch.Tensor(_edgefeats)
+    return targets, edgefeats, edgelist, (clouds_meta, clouds_flag, clouds, clouds_global)
 
 
 ############### POINT CLOUD PROCESSING ##########
