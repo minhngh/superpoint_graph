@@ -36,7 +36,7 @@ from learning import spg_custom as spg
 from learning import graphnet
 from learning import pointnet
 from learning import metrics
-from compgcn.models import CompGCN_ConvE
+from compgcn.models import CompGCN_Classify
 
 from gcn import GCNNet
 
@@ -56,7 +56,7 @@ def main():
     parser.add_argument('--loss_weights', default='none', help='[none, proportional, sqrt] how to weight the loss function')
 
     # Learning process arguments
-    parser.add_argument('--cuda', default=1, type=int, help='Bool, use cuda')
+    parser.add_argument('--cuda', default=0, type=int, help='Bool, use cuda')
     parser.add_argument('--nworkers', default=0, type=int, help='Num subprocesses to use for data loading. 0 means that the data will be loaded in the main process')
     parser.add_argument('--test_nth_epoch', default=1, type=int, help='Test each n-th epoch during training')
     parser.add_argument('--save_nth_epoch', default=1, type=int, help='Save model each n-th epoch during training')
@@ -221,7 +221,7 @@ def main():
             optimizer.zero_grad()
             t0 = time.time()
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-            outputs = model.ecc(embeddings, edge_features, edgelist)
+            outputs = model.compgcn(embeddings, edge_features, edgelist)
             print('embeddings_size:', embeddings.shape, ' size', clouds_data[1].shape)
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
 
@@ -231,7 +231,9 @@ def main():
             
             if args.grad_clip>0:
                 for p in model.parameters():
-                    p.grad.data.clamp_(-args.grad_clip, args.grad_clip)
+                    if p.requires_grad and p.grad is not None:
+                        p.grad.data.clamp_(-args.grad_clip, args.grad_clip)
+            
             optimizer.step()
 
             t_trainer = 1000*(time.time()-t0)
@@ -275,7 +277,7 @@ def main():
                 label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
 
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-            outputs = model.ecc(embeddings, edge_features, edgelist)
+            outputs = model.compgcn(embeddings, edge_features, edgelist)
             
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
             loss_meter.add(loss.item()) 
@@ -307,7 +309,7 @@ def main():
                 label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
 
                 embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-                outputs = model.ecc(embeddings, edge_features, edgelist)
+                outputs = model.compgcn(embeddings, edge_features, edgelist)
 
                 fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
                 collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy()))
@@ -443,8 +445,8 @@ def create_model(args, dbinfo):
     model = nn.Module()
 
     nfeat = args.ptn_widths[1][-1]
-    model.ecc = CompGCN_ConvE(args)
-    model.compgcn = CompGCN_ConvE(args)
+    # model.ecc = CompGCN_Classify(args)
+    model.compgcn = CompGCN_Classify(args)
     model.ptn = pointnet.PointNet(args.ptn_widths[0], args.ptn_widths[1], args.ptn_widths_stn[0], args.ptn_widths_stn[1], dbinfo['node_feats'], args.ptn_nfeat_stn, prelast_do=args.ptn_prelast_do)
 
     print('Total number of parameters: {}'.format(sum([p.numel() for p in model.parameters()])))

@@ -21,7 +21,7 @@ class CompGCNConvBasis(MessagePassing):
 		self.rel_basis 		= get_param((self.num_bases, in_channels))
 
 		self.drop		= torch.nn.Dropout(self.p.dropout)
-		self.bn			= torch.nn.BatchNorm1d(out_channels)
+		# self.bn			= torch.nn.BatchNorm1d(out_channels)
 		
 		if self.p.bias: self.register_parameter('bias', Parameter(torch.zeros(out_channels)))
 
@@ -32,7 +32,7 @@ class CompGCNConvBasis(MessagePassing):
 		rel_embed = torch.mm(rel_emb, self.rel_basis)
 
 		num_ent   = x.size(0)
-
+		
 		self.out_index = edge_index
 
 		self.out_norm    = self.compute_norm(self.out_index, num_ent)

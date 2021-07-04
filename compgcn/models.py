@@ -30,6 +30,8 @@ class CompGCNBase(BaseModel):
 		if self.p.num_bases > 0:
 			self.conv1 = CompGCNConvBasis(self.p.init_dim, self.p.gcn_dim, self.p.num_bases, act=self.act, params=self.p)
 			self.conv2 = CompGCNConv(self.p.gcn_dim,    self.p.embed_dim, act=self.act, params=self.p)
+			self.conv3 = CompGCNConv(self.p.embed_dim,    self.p.embed_dim, act=self.act, params=self.p)
+			self.conv4 = CompGCNConv(self.p.embed_dim,    self.p.embed_dim, act=self.act, params=self.p)
 		else:
 			self.conv1 = CompGCNConv(self.p.init_dim, self.p.gcn_dim, act=self.act, params=self.p)
 			self.conv2 = CompGCNConv(self.p.gcn_dim,    self.p.embed_dim, act=self.act, params=self.p)
@@ -41,9 +43,12 @@ class CompGCNBase(BaseModel):
 		# r	= self.init_rel if self.p.score_func != 'transe' else torch.cat([self.init_rel, -self.init_rel], dim=0)
 		x, r	= self.conv1(node_features, edge_index, rel_emb=edge_features)
 		x	= drop1(x)
-		x, r	= self.conv2(x, edge_index, rel_emb=r) 	if self.p.gcn_layer == 2 else (x, r)
-		x	= drop2(x) 							if self.p.gcn_layer == 2 else x
-
+		x, r	= self.conv2(x, edge_index, rel_emb=r) 
+		x	= drop2(x) 
+		x , r = self.conv3(x, edge_index, rel_emb = r)
+		x = drop2(x)
+		x , r = self.conv4(x, edge_index, rel_emb = r)
+		x = drop2(x)
 		# sub_emb	= torch.index_select(x, 0, sub)
 		# rel_emb	= torch.index_select(r, 0, rel)
 
@@ -105,6 +110,7 @@ class CompGCN_ConvE(CompGCNBase):
 	def concat(self, e1_embed, rel_embed):
 		e1_embed	= e1_embed. view(-1, 1, self.p.embed_dim)
 		rel_embed	= rel_embed.view(-1, 1, self.p.embed_dim)
+
 		stack_inp	= torch.cat([e1_embed, rel_embed], 1)
 		stack_inp	= torch.transpose(stack_inp, 2, 1).reshape((-1, 1, 2*self.p.k_w, self.p.k_h))
 		return stack_inp
@@ -152,3 +158,19 @@ class CompGCN_ConvE(CompGCNBase):
 		# score = self.sigmoid(x)
 		# return score
 		return self.fc_1(x)
+class CompGCN_Classify(CompGCNBase):
+	def __init__(self, params = None):
+		super().__init__(params)
+		self.fc_1 = torch.nn.Linear(params.embed_dim, params.embed_dim)
+		self.relu = torch.nn.ReLU(inplace = True)
+		self.fc_2 = torch.nn.Linear(params.embed_dim, params.n_classes)
+		self.hidden_drop	= torch.nn.Dropout(self.p.hid_drop)
+		self.hidden_drop2	= torch.nn.Dropout(self.p.hid_drop2)
+		self.feature_drop	= torch.nn.Dropout(self.p.feat_drop)
+	def forward(self, node_features, edge_features, edge_index):
+		sub_emb, rel_emb, all_ent	= self.forward_base(node_features, edge_features, edge_index, self.hidden_drop, self.feature_drop)
+		out = self.fc_1(sub_emb)
+		out = self.feature_drop(out)
+		out = self.relu(out)
+		out = self.fc_2(out)
+		return out

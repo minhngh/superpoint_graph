@@ -106,6 +106,7 @@ def spg_reader(args, fname, incl_dir_in_name=False):
 def spg_to_igraph(node_gt, node_gt_size, edges, edge_feats, fname):
     """ Builds representation of superpoint graph as igraph. """
     targets = np.concatenate([node_gt, node_gt_size], axis=1)
+    
     G = igraph.Graph(n=node_gt.shape[0], edges=edges.tolist(), directed=True,
                      edge_attrs={'f':edge_feats},
                      vertex_attrs={'v':list(range(node_gt.shape[0])), 't':targets, 's':node_gt_size.sum(1)})
@@ -162,7 +163,6 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
             clouds = np.stack(clouds)
         if len(clouds_global) != 0:
             clouds_global = np.concatenate(clouds_global)
-
         return np.array(G.vs['t']), G, clouds_meta, clouds_flag, clouds, clouds_global
 
     # Don't use the graph if it doesn't have edges.
@@ -191,7 +191,7 @@ def eccpc_collate(batch):
         clouds_meta = [item for sublist in clouds_meta if sublist is not None for item in sublist]
     
     _edgelist = []
-    _edgefeats = []
+    _edgefeats = None
     acc_node_size = 0
     for graph in graphs:
         edges = torch.Tensor(graph.get_edgelist())
@@ -199,8 +199,13 @@ def eccpc_collate(batch):
         acc_node_size += graph.vcount()
         _edgelist.append(edges)
 
-        _edgefeats.append(graph.es['f'])
+        # _edgefeats.append(graph.es['f'])
+        if _edgefeats is None:
+            _edgefeats = graph.es['f']
+        else:
+            _edgefeats = np.vstack((_edgefeats, graph.es['f']))
     edgelist = torch.cat(_edgelist, dim = 0).long().T
+
     edgefeats = torch.Tensor(_edgefeats)
     return targets, edgefeats, edgelist, (clouds_meta, clouds_flag, clouds, clouds_global)
 
