@@ -82,7 +82,7 @@ def spg_reader(args, fname, incl_dir_in_name=False):
     node_att['volume'] = np.maximum(0, f['sp_volume'][:] ** 2)
     node_att['surface'] = np.maximum(0, f['sp_surface'][:] ** 2)
     node_att['size'] = f['sp_point_count'][:]
-    print('size of node attr:', len(node_att['xyz']))
+    # print('size of node attr:', len(node_att['xyz']))
     edges = np.concatenate([ f['source'][:], f['target'][:] ], axis=1).astype(np.int64)
 
     edge_att = {}

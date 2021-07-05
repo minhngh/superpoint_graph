@@ -97,7 +97,7 @@ def preprocess_pointclouds(SEMA3D_PATH):
         random.seed(0)
 
         for file in os.listdir(pathC):
-            print(file)
+            # print(file)
             if file.endswith(".h5"):
                 f = h5py.File(pathD + file, 'r')
 

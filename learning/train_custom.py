@@ -130,7 +130,7 @@ def main():
     parser.add_argument('--k_w', type = int, default = 8)
     parser.add_argument('--k_h', type = int, default = 8)
     parser.add_argument('--score_func', type = str, default = 'conve')
-    parser.add_argument('--opn', type = str, default = 'mult')
+    parser.add_argument('--opn', type = str, default = 'sub')
     parser.add_argument('--b_norm', type = bool, default = True)
     parser.add_argument('--n_classes', type = int, default = 8)
 
@@ -222,7 +222,7 @@ def main():
             t0 = time.time()
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
             outputs = model.compgcn(embeddings, edge_features, edgelist)
-            print('embeddings_size:', embeddings.shape, ' size', clouds_data[1].shape)
+            # print('embeddings_size:', embeddings.shape, ' size', clouds_data[1].shape)
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
 
             loss.backward()
