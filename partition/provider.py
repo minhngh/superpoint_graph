@@ -575,6 +575,12 @@ def write_spg(file_name, graph_sp, components, in_component):
                              , data=graph_sp["se_delta_std"], dtype='float32')
     data_file.create_dataset('se_delta_norm'
                              , data=graph_sp["se_delta_norm"], dtype='float32')
+    data_file.create_dataset('se_inverse_delta_mean'
+                             , data=graph_sp["se_inverse_delta_mean"], dtype='float32')
+    data_file.create_dataset('se_inverse_delta_std'
+                             , data=graph_sp["se_inverse_delta_std"], dtype='float32')
+    data_file.create_dataset('se_inverse_delta_norm'
+                             , data=graph_sp["se_inverse_delta_norm"], dtype='float32')
     data_file.create_dataset('se_delta_centroid'
                              , data=graph_sp["se_delta_centroid"], dtype='float32')
     data_file.create_dataset('se_length_ratio'
@@ -585,6 +591,17 @@ def write_spg(file_name, graph_sp, components, in_component):
                              , data=graph_sp["se_volume_ratio"], dtype='float32')
     data_file.create_dataset('se_point_count_ratio'
                              , data=graph_sp["se_point_count_ratio"], dtype='float32')
+
+    data_file.create_dataset('se_inverse_delta_centroid'
+                             , data=graph_sp["se_inverse_delta_centroid"], dtype='float32')
+    data_file.create_dataset('se_inverse_length_ratio'
+                             , data=graph_sp["se_inverse_length_ratio"], dtype='float32')
+    data_file.create_dataset('se_inverse_surface_ratio'
+                             , data=graph_sp["se_inverse_surface_ratio"], dtype='float32')
+    data_file.create_dataset('se_inverse_volume_ratio'
+                             , data=graph_sp["se_inverse_volume_ratio"], dtype='float32')
+    data_file.create_dataset('se_inverse_point_count_ratio'
+                             , data=graph_sp["se_inverse_point_count_ratio"], dtype='float32')
 #-----------------------------------------------------------------------------
 def read_spg(file_name):
     """read the partition and spg information"""
@@ -600,11 +617,19 @@ def read_spg(file_name):
     graph["se_delta_mean"] = np.array(data_file["se_delta_mean"], dtype='float32')
     graph["se_delta_std"] = np.array(data_file["se_delta_std"], dtype='float32')
     graph["se_delta_norm"] = np.array(data_file["se_delta_norm"], dtype='float32')
+    graph["se_inverse_delta_mean"] = np.array(data_file["se_inverse_delta_mean"], dtype='float32')
+    graph["se_inverse_delta_std"] = np.array(data_file["se_inverse_delta_std"], dtype='float32')
+    graph["se_inverse_delta_norm"] = np.array(data_file["se_inverse_delta_norm"], dtype='float32')
     graph["se_delta_centroid"] = np.array(data_file["se_delta_centroid"], dtype='float32')
     graph["se_length_ratio"] = np.array(data_file["se_length_ratio"], dtype='float32')
     graph["se_surface_ratio"] = np.array(data_file["se_surface_ratio"], dtype='float32')
     graph["se_volume_ratio"] = np.array(data_file["se_volume_ratio"], dtype='float32')
     graph["se_point_count_ratio"] = np.array(data_file["se_point_count_ratio"], dtype='float32')
+    graph["se_inverse_delta_centroid"] = np.array(data_file["se_inverse_delta_centroid"], dtype='float32')
+    graph["se_inverse_length_ratio"] = np.array(data_file["se_inverse_length_ratio"], dtype='float32')
+    graph["se_inverse_surface_ratio"] = np.array(data_file["se_inverse_surface_ratio"], dtype='float32')
+    graph["se_inverse_volume_ratio"] = np.array(data_file["se_inverse_volume_ratio"], dtype='float32')
+    graph["se_inverse_point_count_ratio"] = np.array(data_file["se_inverse_point_count_ratio"], dtype='float32')
     in_component = np.array(data_file["in_component"], dtype='uint32')
     n_com = len(graph["sp_length"])
     graph["sp_labels"] = np.array(data_file["sp_labels"], dtype='uint32')
