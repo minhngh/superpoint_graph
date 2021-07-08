@@ -198,14 +198,28 @@ def compute_sp_graph(xyz, d_max, in_component, components, labels, n_labels):
         graph["se_surface_ratio"][i_sedg] = graph["sp_surface"][com_source] / (graph["sp_surface"][com_target] + 1e-6)
         graph["se_volume_ratio"][i_sedg] = graph["sp_volume"][com_source] / (graph["sp_volume"][com_target] + 1e-6)
         graph["se_point_count_ratio"][i_sedg] = graph["sp_point_count"][com_source] / (graph["sp_point_count"][com_target] + 1e-6)
+
+        graph["se_inverse_delta_centroid"][i_sedg,:] = graph["sp_centroids"][com_target,:] - graph["sp_centroids"][com_source, :]
+        graph["se_inverse_length_ratio"][i_sedg] = graph["sp_length"][com_target] / (graph["sp_length"][com_source] + 1e-6)
+        graph["se_inverse_surface_ratio"][i_sedg] = graph["sp_surface"][com_target] / (graph["sp_surface"][com_source] + 1e-6)
+        graph["se_inverse_volume_ratio"][i_sedg] = graph["sp_volume"][com_target] / (graph["sp_volume"][com_source] + 1e-6)
+        graph["se_inverse_point_count_ratio"][i_sedg] = graph["sp_point_count"][com_target] / (graph["sp_point_count"][com_source] + 1e-6)
         #---compute the offset set---
         delta = xyz_source - xyz_target
         if len(delta) > 1:
             graph["se_delta_mean"][i_sedg] = np.mean(delta, axis=0)
             graph["se_delta_std"][i_sedg] = np.std(delta, axis=0)
             graph["se_delta_norm"][i_sedg] = np.mean(np.sqrt(np.sum(delta ** 2, axis=1)))
+
+            graph["se_inverse_delta_mean"][i_sedg] =  -graph["se_delta_mean"][i_sedg]
+            graph["se_inverse_delta_std"][i_sedg] = graph["se_delta_std"][i_sedg]
+            graph["se_inverse_delta_norm"][i_sedg] = graph["se_delta_norm"][i_sedg]
         else:
             graph["se_delta_mean"][i_sedg, :] = delta
             graph["se_delta_std"][i_sedg, :] = [0, 0, 0]
             graph["se_delta_norm"][i_sedg] = np.sqrt(np.sum(delta ** 2))
+
+            graph["se_inverse_delta_mean"][i_sedg] =  -graph["se_delta_mean"][i_sedg]
+            graph["se_inverse_delta_std"][i_sedg] = graph["se_delta_std"][i_sedg]
+            graph["se_inverse_delta_norm"][i_sedg] = graph["se_delta_norm"][i_sedg]
     return graph

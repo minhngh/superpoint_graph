@@ -24,29 +24,36 @@ import igraph
 def spg_edge_features(edges, node_att, edge_att, args):
     """ Assembles edge features from edge attributes and differences of node attributes. """
     columns = []
+    inverse_columns = []
     for attrib in args.edge_attribs.split(','):
         attrib = attrib.split('/')
         a, opt = attrib[0], attrib[1].lower() if len(attrib)==2 else ''
 
         if a in ['delta_avg', 'delta_std']:
             columns.append(edge_att[a])
+            inverse_columns.append(edge_att[f'inverse_{a}'])
         elif a=='constant': # for isotropic baseline
             columns.append(np.ones((edges.shape[0],1), dtype=np.float32))
+            inverse_columns.append(np.ones((edges.shape[0],1), dtype=np.float32))
         elif a in ['nlength','surface','volume', 'size', 'xyz']:
             attr = node_att[a]
             if opt=='d': # difference
                 attr = attr[edges[:,0],:] - attr[edges[:,1],:]
+                i_a = attr[edges[:,1],:] - attr[edges[:,0],:]
             elif opt=='ld': # log ratio
                 attr = np.log(attr + 1e-10)
                 attr = attr[edges[:,0],:] - attr[edges[:,1],:]
+                i_a = attr[edges[:,1],:] - attr[edges[:,0],:]
             elif opt=='r': # ratio
                 attr = attr[edges[:,0],:] / (attr[edges[:,1],:] + 1e-10)
+                i_a = attr[edges[:,1],:] / (attr[edges[:,0],:] + 1e-10)
             else:
                 raise NotImplementedError
             columns.append(attr)
+            inverse_columns.append(i_a)
         else:
             raise NotImplementedError
-    return np.concatenate(columns, axis=1).astype(np.float32)
+    return np.concatenate(columns, axis=1).astype(np.float32), np.concatenate(inverse_columns, axis=1).astype(np.float32)
 
 def scaler01(trainlist, testlist, transform_train=True, validlist = []):
     """ Scale edge features to 0 mean 1 stddev """
@@ -89,16 +96,26 @@ def spg_reader(args, fname, incl_dir_in_name=False):
     edge_att['delta_avg'] = f['se_delta_mean'][:]
     edge_att['delta_std'] = f['se_delta_std'][:]
 
+    edge_att['inverse_delta_avg'] = f['se_inverse_delta_mean'][:]
+    edge_att['inverse_delta_std'] = f['se_inverse_delta_std'][:]
     if args.spg_superedge_cutoff > 0:
         filtered = np.linalg.norm(edge_att['delta_avg'],axis=1) < args.spg_superedge_cutoff
         edges = edges[filtered,:]
         edge_att['delta_avg'] = edge_att['delta_avg'][filtered,:]
         edge_att['delta_std'] = edge_att['delta_std'][filtered,:]
 
-    edge_feats = spg_edge_features(edges, node_att, edge_att, args)
+        filtered = np.linalg.norm(edge_att['inverse_delta_avg'],axis=1) < args.spg_superedge_cutoff
+        edges = edges[filtered,:]
+        edge_att['inverse_delta_avg'] = edge_att['inverse_delta_avg'][filtered,:]
+        edge_att['inverse_delta_std'] = edge_att['inverse_delta_std'][filtered,:]
+
+    edge_feats, inverse_edge_feats = spg_edge_features(edges, node_att, edge_att, args)
 
     name = os.path.basename(fname)[:-len('.h5')]
     if incl_dir_in_name: name = os.path.basename(os.path.dirname(fname)) + '/' + name
+    inverse_edges = torch.index_select(edges, 1, [1, 0])
+    edges = torch.cat((edges, inverse_edges), dim = 1)
+    edge_feats = torch.cat((edge_feats, inverse_edge_feats), dim = 1)
 
     return node_gt, node_gt_size, edges, edge_feats, name
 
@@ -106,11 +123,12 @@ def spg_reader(args, fname, incl_dir_in_name=False):
 def spg_to_igraph(node_gt, node_gt_size, edges, edge_feats, fname):
     """ Builds representation of superpoint graph as igraph. """
     targets = np.concatenate([node_gt, node_gt_size], axis=1)
-    
+    all_edges = edges.copy()
+    edges = edges[:, : edges.shape[1] // 2]
     G = igraph.Graph(n=node_gt.shape[0], edges=edges.tolist(), directed=True,
                      edge_attrs={'f':edge_feats},
                      vertex_attrs={'v':list(range(node_gt.shape[0])), 't':targets, 's':node_gt_size.sum(1)})
-    return G, fname
+    return G, all_edges, fname
 
 def random_neighborhoods(G, num, order):
     """ Samples `num` random neighborhoods of size `order`.
@@ -130,7 +148,7 @@ def k_big_enough(G, minpts, k):
 
 def loader(entry, train, args, db_path, test_seed_offset=0):
     """ Prepares a superpoint graph (potentially subsampled in training) and associated superpoints. """
-    G, fname = entry
+    G, all_edges, fname = entry
     # 1) subset (neighborhood) selection of (permuted) superpoint graph
     if train:
         if 0 < args.spg_augm_hardcutoff < G.vcount():
@@ -163,12 +181,12 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
             clouds = np.stack(clouds)
         if len(clouds_global) != 0:
             clouds_global = np.concatenate(clouds_global)
-        return np.array(G.vs['t']), G, clouds_meta, clouds_flag, clouds, clouds_global
+        return np.array(G.vs['t']), G, all_edges, clouds_meta, clouds_flag, clouds, clouds_global
 
     # Don't use the graph if it doesn't have edges.
     else:
         target, G, clouds_meta, clouds_flag, clouds, clouds_global = None, None, None, None, None, None
-        return target, G, clouds_meta, clouds_flag, clouds, clouds_global
+        return target, G, all_edges, clouds_meta, clouds_flag, clouds, clouds_global
 
 
 def cloud_edge_feats(edgeattrs):
@@ -178,7 +196,7 @@ def cloud_edge_feats(edgeattrs):
 def eccpc_collate(batch):
     """ Collates a list of dataset samples into a single batch (adapted in ecc.graph_info_collate_classification())
     """
-    targets, graphs, clouds_meta, clouds_flag, clouds, clouds_global = list(zip(*batch))
+    targets, graphs, all_edges, clouds_meta, clouds_flag, clouds, clouds_global = list(zip(*batch))
 
     targets = torch.cat([torch.from_numpy(t) for t in targets if t is not None], 0).long()
     graphs = [graph for graph in graphs if graph is not None]
@@ -193,17 +211,22 @@ def eccpc_collate(batch):
     _edgelist = []
     _edgefeats = None
     acc_node_size = 0
-    for graph in graphs:
+    for graph, _edges in zip(graphs, all_edges):
         edges = torch.Tensor(graph.get_edgelist())
         edges += acc_node_size
         acc_node_size += graph.vcount()
+        _inverse_edges = _edges[:, (_edges.shape[1] // 2) :] + acc_node_size
         _edgelist.append(edges)
+        _edgelist.append(_inverse_edges)
 
         # _edgefeats.append(graph.es['f'])
+        es = graph.es['f']
+        mid = es.shape[1] // 2
+        _es, _ies = es[:, :mid], es[:, mid:]
         if _edgefeats is None:
-            _edgefeats = graph.es['f']
+            _edgefeats = np.vstack((_es, _ies))
         else:
-            _edgefeats = np.vstack((_edgefeats, graph.es['f']))
+            _edgefeats = np.vstack((_edgefeats, _es, _ies))
     edgelist = torch.cat(_edgelist, dim = 0).long().T
 
     edgefeats = torch.Tensor(_edgefeats)
