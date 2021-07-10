@@ -69,7 +69,7 @@ def main():
     parser.add_argument('--resume', default='', help='Loads a previously saved model.')
     parser.add_argument('--db_train_name', default='train')
     parser.add_argument('--db_test_name', default='test')
-    parser.add_argument('--use_val_set', type=int, default=0)
+    parser.add_argument('--use_val_set', type=int, default=1)
     parser.add_argument('--SEMA3D_PATH', default='datasets/semantic3d')
     parser.add_argument('--S3DIS_PATH', default='datasets/s3dis')
     parser.add_argument('--VKITTI_PATH', default='datasets/vkitti')
@@ -207,13 +207,15 @@ def main():
         t0 = time.time()
 
         # iterate over dataset in batches
-        for bidx, (targets, edge_features, edgelist, clouds_data) in enumerate(loader):
+        for bidx, (targets, edge_features, inverse_edge_features, edgelist, inverse_edgelist, clouds_data) in enumerate(loader):
             t_loader = 1000*(time.time()-t0)
             # model.ecc.set_info(GIs, args.cuda)
             label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1)
             if args.cuda:
                 edgelist = edgelist.cuda()
                 edge_features = edge_features.cuda()
+                inverse_edge_features = inverse_edge_features.cuda()
+                inverse_edgelist = inverse_edgelist.cuda()
                 label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
             else:
                 label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
@@ -221,7 +223,8 @@ def main():
             optimizer.zero_grad()
             t0 = time.time()
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-            outputs = model.compgcn(embeddings, edge_features, edgelist)
+
+            outputs = model.compgcn(embeddings, edge_features, inverse_edge_features, edgelist, inverse_edgelist)
             # print('embeddings_size:', embeddings.shape, ' size', clouds_data[1].shape)
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
 
@@ -266,18 +269,20 @@ def main():
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
 
         # iterate over dataset in batches
-        for bidx, (targets, edge_features, edgelist, clouds_data) in enumerate(loader):
+        for bidx, (targets, edge_features, inverse_edge_features, edgelist, inverse_edgelist, clouds_data) in enumerate(loader):
             
             label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
             if args.cuda:
                 edgelist = edgelist.cuda()
                 edge_features = edge_features.cuda()
+                inverse_edge_features = inverse_edge_features.cuda()
+                inverse_edgelist = inverse_edgelist.cuda()
                 label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
             else:
                 label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
 
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-            outputs = model.compgcn(embeddings, edge_features, edgelist)
+            outputs = model.compgcn(embeddings, edge_features, inverse_edge_features, edgelist, inverse_edgelist)
             
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
             loss_meter.add(loss.item()) 
@@ -305,11 +310,11 @@ def main():
             if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
 
             # iterate over dataset in batches
-            for bidx, (targets, edge_features, edgelist, clouds_data) in enumerate(loader):
+            for bidx, (targets, edge_features, inverse_edge_features, edgelist, inverse_edgelist, clouds_data) in enumerate(loader):
                 label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
 
                 embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-                outputs = model.compgcn(embeddings, edge_features, edgelist)
+                outputs = model.compgcn(embeddings, edge_features, inverse_edge_features, edgelist, inverse_edgelist)
 
                 fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
                 collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy()))

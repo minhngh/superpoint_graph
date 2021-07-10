@@ -105,7 +105,7 @@ def spg_reader(args, fname, incl_dir_in_name=False):
         edge_att['delta_std'] = edge_att['delta_std'][filtered,:]
 
         filtered = np.linalg.norm(edge_att['inverse_delta_avg'],axis=1) < args.spg_superedge_cutoff
-        edges = edges[filtered,:]
+        edges = edges[filtered, :]
         edge_att['inverse_delta_avg'] = edge_att['inverse_delta_avg'][filtered,:]
         edge_att['inverse_delta_std'] = edge_att['inverse_delta_std'][filtered,:]
 
@@ -113,9 +113,8 @@ def spg_reader(args, fname, incl_dir_in_name=False):
 
     name = os.path.basename(fname)[:-len('.h5')]
     if incl_dir_in_name: name = os.path.basename(os.path.dirname(fname)) + '/' + name
-    inverse_edges = torch.index_select(edges, 1, [1, 0])
-    edges = torch.cat((edges, inverse_edges), dim = 1)
-    edge_feats = torch.cat((edge_feats, inverse_edge_feats), dim = 1)
+
+    edge_feats = np.hstack((edge_feats, inverse_edge_feats))
 
     return node_gt, node_gt_size, edges, edge_feats, name
 
@@ -123,12 +122,12 @@ def spg_reader(args, fname, incl_dir_in_name=False):
 def spg_to_igraph(node_gt, node_gt_size, edges, edge_feats, fname):
     """ Builds representation of superpoint graph as igraph. """
     targets = np.concatenate([node_gt, node_gt_size], axis=1)
-    all_edges = edges.copy()
-    edges = edges[:, : edges.shape[1] // 2]
+    
     G = igraph.Graph(n=node_gt.shape[0], edges=edges.tolist(), directed=True,
-                     edge_attrs={'f':edge_feats},
+                     edge_attrs={'f': edge_feats},
                      vertex_attrs={'v':list(range(node_gt.shape[0])), 't':targets, 's':node_gt_size.sum(1)})
-    return G, all_edges, fname
+    
+    return G, fname
 
 def random_neighborhoods(G, num, order):
     """ Samples `num` random neighborhoods of size `order`.
@@ -148,7 +147,7 @@ def k_big_enough(G, minpts, k):
 
 def loader(entry, train, args, db_path, test_seed_offset=0):
     """ Prepares a superpoint graph (potentially subsampled in training) and associated superpoints. """
-    G, all_edges, fname = entry
+    G, fname = entry
     # 1) subset (neighborhood) selection of (permuted) superpoint graph
     if train:
         if 0 < args.spg_augm_hardcutoff < G.vcount():
@@ -181,12 +180,12 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
             clouds = np.stack(clouds)
         if len(clouds_global) != 0:
             clouds_global = np.concatenate(clouds_global)
-        return np.array(G.vs['t']), G, all_edges, clouds_meta, clouds_flag, clouds, clouds_global
+        return np.array(G.vs['t']), G, clouds_meta, clouds_flag, clouds, clouds_global
 
     # Don't use the graph if it doesn't have edges.
     else:
         target, G, clouds_meta, clouds_flag, clouds, clouds_global = None, None, None, None, None, None
-        return target, G, all_edges, clouds_meta, clouds_flag, clouds, clouds_global
+        return target, G, clouds_meta, clouds_flag, clouds, clouds_global
 
 
 def cloud_edge_feats(edgeattrs):
@@ -196,7 +195,7 @@ def cloud_edge_feats(edgeattrs):
 def eccpc_collate(batch):
     """ Collates a list of dataset samples into a single batch (adapted in ecc.graph_info_collate_classification())
     """
-    targets, graphs, all_edges, clouds_meta, clouds_flag, clouds, clouds_global = list(zip(*batch))
+    targets, graphs, clouds_meta, clouds_flag, clouds, clouds_global = list(zip(*batch))
 
     targets = torch.cat([torch.from_numpy(t) for t in targets if t is not None], 0).long()
     graphs = [graph for graph in graphs if graph is not None]
@@ -209,28 +208,34 @@ def eccpc_collate(batch):
         clouds_meta = [item for sublist in clouds_meta if sublist is not None for item in sublist]
     
     _edgelist = []
+    _inverse_edgelist = []
     _edgefeats = None
+    _inverse_edgefeats = None
     acc_node_size = 0
-    for graph, _edges in zip(graphs, all_edges):
-        edges = torch.Tensor(graph.get_edgelist())
-        edges += acc_node_size
-        acc_node_size += graph.vcount()
-        _inverse_edges = _edges[:, (_edges.shape[1] // 2) :] + acc_node_size
+    
+    for graph in graphs:
+        edges = torch.Tensor(graph.get_edgelist()) + acc_node_size
+        _inverse_edges = torch.index_select(edges, 1, torch.tensor([1, 0]))
         _edgelist.append(edges)
-        _edgelist.append(_inverse_edges)
-
+        _inverse_edgelist.append(_inverse_edges)
+        acc_node_size += graph.vcount()
         # _edgefeats.append(graph.es['f'])
-        es = graph.es['f']
+        es = torch.tensor(np.array(graph.es['f']))
+        
         mid = es.shape[1] // 2
         _es, _ies = es[:, :mid], es[:, mid:]
         if _edgefeats is None:
-            _edgefeats = np.vstack((_es, _ies))
+            _edgefeats = _es
+            _inverse_edgefeats = _ies
         else:
-            _edgefeats = np.vstack((_edgefeats, _es, _ies))
+            _edgefeats = np.vstack((_edgefeats, _es))
+            _inverse_edgefeats = np.vstack((_inverse_edgefeats, _ies))
     edgelist = torch.cat(_edgelist, dim = 0).long().T
-
+    inverse_edgelist = torch.cat(_inverse_edgelist, dim = 0).long().T
+    
     edgefeats = torch.Tensor(_edgefeats)
-    return targets, edgefeats, edgelist, (clouds_meta, clouds_flag, clouds, clouds_global)
+    inverse_edgefeats = torch.Tensor(_inverse_edgefeats)
+    return targets, edgefeats, inverse_edgefeats, edgelist, inverse_edgelist, (clouds_meta, clouds_flag, clouds, clouds_global)
 
 
 ############### POINT CLOUD PROCESSING ##########

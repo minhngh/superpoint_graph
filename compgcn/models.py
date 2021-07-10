@@ -32,27 +32,33 @@ class CompGCNBase(BaseModel):
 			self.conv2 = CompGCNConv(self.p.gcn_dim,    self.p.embed_dim, act=self.act, params=self.p)
 			self.conv3 = CompGCNConv(self.p.embed_dim,    self.p.embed_dim, act=self.act, params=self.p)
 			self.conv4 = CompGCNConv(self.p.embed_dim,    self.p.embed_dim, act=self.act, params=self.p)
+			self.conv5 = CompGCNConv(self.p.embed_dim,    self.p.embed_dim, act=self.act, params=self.p)
+			self.conv6 = CompGCNConv(self.p.embed_dim,    self.p.embed_dim, act=self.act, params=self.p)
 		else:
 			self.conv1 = CompGCNConv(self.p.init_dim, self.p.gcn_dim, act=self.act, params=self.p)
 			self.conv2 = CompGCNConv(self.p.gcn_dim,    self.p.embed_dim, act=self.act, params=self.p)
 
 		# self.register_parameter('bias', Parameter(torch.zeros(self.p.num_ent)))
 
-	def forward_base(self, node_features, edge_features, edge_index, drop1, drop2):
+	def forward_base(self, node_features, edge_features, inverse_edge_features, edge_index, inverse_edge_index, drop1, drop2):
 
 		# r	= self.init_rel if self.p.score_func != 'transe' else torch.cat([self.init_rel, -self.init_rel], dim=0)
-		x, r	= self.conv1(node_features, edge_index, rel_emb=edge_features)
+		x, r, ir	= self.conv1(node_features, edge_features, inverse_edge_features, edge_index, inverse_edge_index)
 		x	= drop1(x)
-		x, r	= self.conv2(x, edge_index, rel_emb=r) 
+		x, r, ir	= self.conv2(x, r, ir, edge_index, inverse_edge_index) 
 		x	= drop2(x) 
-		x , r = self.conv3(x, edge_index, rel_emb = r)
+		x, r, ir = self.conv3(x, r, ir, edge_index, inverse_edge_index)
 		x = drop2(x)
-		x , r = self.conv4(x, edge_index, rel_emb = r)
+		x, r, ir = self.conv4(x, r, ir, edge_index, inverse_edge_index)
+		x = drop2(x)
+		x, r, ir = self.conv5(x, r, ir, edge_index, inverse_edge_index)
+		x = drop2(x)
+		x, r, ir = self.conv6(x, r, ir, edge_index, inverse_edge_index)
 		x = drop2(x)
 		# sub_emb	= torch.index_select(x, 0, sub)
 		# rel_emb	= torch.index_select(r, 0, rel)
 
-		return x, r, x
+		return x, r, ir
 
 
 class CompGCN_TransE(CompGCNBase):
@@ -167,8 +173,8 @@ class CompGCN_Classify(CompGCNBase):
 		self.hidden_drop	= torch.nn.Dropout(self.p.hid_drop)
 		self.hidden_drop2	= torch.nn.Dropout(self.p.hid_drop2)
 		self.feature_drop	= torch.nn.Dropout(self.p.feat_drop)
-	def forward(self, node_features, edge_features, edge_index):
-		sub_emb, rel_emb, all_ent	= self.forward_base(node_features, edge_features, edge_index, self.hidden_drop, self.feature_drop)
+	def forward(self, node_features, edge_features, inverse_edge_features, edge_index, inverse_edge_index):
+		sub_emb, rel_emb, all_ent	= self.forward_base(node_features, edge_features, inverse_edge_features, edge_index, inverse_edge_index, self.hidden_drop, self.feature_drop)
 		out = self.fc_1(sub_emb)
 		out = self.feature_drop(out)
 		out = self.relu(out)
