@@ -122,7 +122,6 @@ def spg_reader(args, fname, incl_dir_in_name=False):
 def spg_to_igraph(node_gt, node_gt_size, edges, edge_feats, fname):
     """ Builds representation of superpoint graph as igraph. """
     targets = np.concatenate([node_gt, node_gt_size], axis=1)
-    
     G = igraph.Graph(n=node_gt.shape[0], edges=edges.tolist(), directed=True,
                      edge_attrs={'f': edge_feats},
                      vertex_attrs={'v':list(range(node_gt.shape[0])), 't':targets, 's':node_gt_size.sum(1)})
@@ -149,16 +148,16 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
     """ Prepares a superpoint graph (potentially subsampled in training) and associated superpoints. """
     G, fname = entry
     # 1) subset (neighborhood) selection of (permuted) superpoint graph
-    if train:
-        if 0 < args.spg_augm_hardcutoff < G.vcount():
-            perm = list(range(G.vcount())); random.shuffle(perm)
-            G = G.permute_vertices(perm)
+    # if train:
+    #     if 0 < args.spg_augm_hardcutoff < G.vcount():
+    #         perm = list(range(G.vcount())); random.shuffle(perm)
+    #         G = G.permute_vertices(perm)
 
-        if 0 < args.spg_augm_nneigh < G.vcount():
-            G = random_neighborhoods(G, args.spg_augm_nneigh, args.spg_augm_order)
+    #     if 0 < args.spg_augm_nneigh < G.vcount():
+    #         G = random_neighborhoods(G, args.spg_augm_nneigh, args.spg_augm_order)
 
-        if 0 < args.spg_augm_hardcutoff < G.vcount():
-            G = k_big_enough(G, args.ptn_minpts, args.spg_augm_hardcutoff)
+    #     if 0 < args.spg_augm_hardcutoff < G.vcount():
+    #         G = k_big_enough(G, args.ptn_minpts, args.spg_augm_hardcutoff)
 
     # Only stores graph with edges
     if len(G.get_edgelist()) != 0:
