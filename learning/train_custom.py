@@ -302,22 +302,29 @@ def main():
         acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
         collected, predictions = defaultdict(list), {}
+        with torch.no_grad():
+            # collect predictions over multiple sampling seeds
+            for ss in range(args.test_multisamp_n):
+                test_dataset_ss = create_dataset(args, ss)[1]
+                loader = torch.utils.data.DataLoader(test_dataset_ss, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
+                if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
 
-        # collect predictions over multiple sampling seeds
-        for ss in range(args.test_multisamp_n):
-            test_dataset_ss = create_dataset(args, ss)[1]
-            loader = torch.utils.data.DataLoader(test_dataset_ss, batch_size=1, collate_fn=spg.eccpc_collate, num_workers=args.nworkers)
-            if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
+                # iterate over dataset in batches
+                for bidx, (targets, edge_features, inverse_edge_features, edgelist, inverse_edgelist, clouds_data) in enumerate(loader):
+                    label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
+                    if args.cuda:
+                        edgelist = edgelist.cuda()
+                        edge_features = edge_features.cuda()
+                        inverse_edge_features = inverse_edge_features.cuda()
+                        inverse_edgelist = inverse_edgelist.cuda()
+                        label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
+                    else:
+                        label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
+                    embeddings = ptnCloudEmbedder.run(model, *clouds_data)
+                    outputs = model.compgcn(embeddings, edge_features, inverse_edge_features, edgelist, inverse_edgelist)
 
-            # iterate over dataset in batches
-            for bidx, (targets, edge_features, inverse_edge_features, edgelist, inverse_edgelist, clouds_data) in enumerate(loader):
-                label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
-
-                embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-                outputs = model.compgcn(embeddings, edge_features, inverse_edge_features, edgelist, inverse_edgelist)
-
-                fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
-                collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.numpy(), label_vec_cpu.numpy()))
+                    fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
+                    collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.cpu().numpy(), label_vec_cpu.cpu().numpy()))
 
         # aggregate predictions (mean)
         for fname, lst in collected.items():
@@ -354,7 +361,7 @@ def main():
     
     for epoch in range(args.start_epoch, args.epochs):
         print('Epoch {}/{} ({}):'.format(epoch, args.epochs, args.odir))
-        scheduler.step()
+        
 
         acc, loss, oacc, avg_iou = train()
 
@@ -374,6 +381,7 @@ def main():
         elif epoch % args.save_nth_epoch == 0 or epoch==args.epochs-1:
                 torch.save({'epoch': epoch + 1, 'args': args, 'state_dict': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scaler': scaler},
                        os.path.join(args.odir, 'model.pth.tar'))
+        scheduler.step()
         #test every test_nth_epochs
         #or test after each enw model (but skip the first 5 for efficiency)
         if (not(args.use_val_set) and (epoch+1) % args.test_nth_epoch == 0)  \
