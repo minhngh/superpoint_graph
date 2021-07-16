@@ -133,6 +133,7 @@ def main():
     parser.add_argument('--opn', type = str, default = 'sub')
     parser.add_argument('--b_norm', type = bool, default = True)
     parser.add_argument('--n_classes', type = int, default = 8)
+    parser.add_argument('--k-fold', type = int, default = 0)
 
     args = parser.parse_args()
     args.start_epoch = 0
