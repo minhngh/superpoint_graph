@@ -111,7 +111,7 @@ def main():
     # Decoder
     parser.add_argument('--sp_decoder_config', default="[]", type=str,
                         help='Size of the decoder : sp_embedding -> sp_class. First layer of size sp_embed (* (1+n_ecc_iteration) if concatenation) and last layer is n_classes')
-
+    parser.add_argument('--k-fold', type = int, default = 0)
     args = parser.parse_args()
     args.start_epoch = 0
     args.lr_steps = ast.literal_eval(args.lr_steps)
