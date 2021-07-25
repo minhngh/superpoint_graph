@@ -9,6 +9,7 @@ from builtins import range
 
 import time
 import random
+from dgl.batch import batch
 import numpy as np
 import json
 import os
@@ -36,7 +37,7 @@ from learning import spg_custom as spg
 from learning import graphnet
 from learning import pointnet
 from learning import metrics
-from compgcn.models import CompGCN_Classify
+from gated_gcn import GatedGCNNet
 
 from gcn import GCNNet
 
@@ -115,23 +116,13 @@ def main():
     # Decoder
     parser.add_argument('--sp_decoder_config', default="[]", type=str,
                         help='Size of the decoder : sp_embedding -> sp_class. First layer of size sp_embed (* (1+n_ecc_iteration) if concatenation) and last layer is n_classes')
-    parser.add_argument('--gcn_layer', type = int, default = 2)
-    parser.add_argument('--embed_dim', type = int, default = 64)
-    parser.add_argument('--gcn_dim', type = int, default = 32)
-    parser.add_argument('--num_bases', type = int, default = 13)
-    parser.add_argument('--init_dim', type = int, default = 32)
-    parser.add_argument('--num_filt', type = int, default = 32)
+    parser.add_argument('--L', type = int, default = 4)
+    parser.add_argument('--in_dim_node', type = int, default = 32)
+    parser.add_argument('--in_dim_edge', type = int, default = 13)
+    parser.add_argument('--hidden_dim', type = int, default = 64)
     parser.add_argument('--dropout', type = float, default = .4)
-    parser.add_argument('--bias', type = bool, default = False)
-    parser.add_argument('--hid_drop', type = float, default = .4)
-    parser.add_argument('--hid_drop2', type = float, default = .3)
-    parser.add_argument('--feat_drop', type = float, default = .3)
-    parser.add_argument('--ker_sz', type = int, default = 3)
-    parser.add_argument('--k_w', type = int, default = 8)
-    parser.add_argument('--k_h', type = int, default = 8)
-    parser.add_argument('--score_func', type = str, default = 'conve')
-    parser.add_argument('--opn', type = str, default = 'sub')
-    parser.add_argument('--b_norm', type = bool, default = True)
+    parser.add_argument('--batch_norm', type = bool, default = True)
+    parser.add_argument('--residual', type = bool, default = True)
     parser.add_argument('--n_classes', type = int, default = 8)
     parser.add_argument('--k-fold', type = int, default = 0)
 
@@ -142,6 +133,7 @@ def main():
     args.ptn_widths = ast.literal_eval(args.ptn_widths)
     args.sp_decoder_config = ast.literal_eval(args.sp_decoder_config)
     args.ptn_widths_stn = ast.literal_eval(args.ptn_widths_stn)
+    args.device = torch.device('cuda' if args.cuda else 'cpu')
 
 
     print('Will save to ' + args.odir)
@@ -206,17 +198,14 @@ def main():
         acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
         t0 = time.time()
-
+        
         # iterate over dataset in batches
-        for bidx, (targets, edge_features, inverse_edge_features, edgelist, inverse_edgelist, clouds_data) in enumerate(loader):
+        for bidx, (targets, batch_graphs, clouds_data) in enumerate(loader):
             t_loader = 1000*(time.time()-t0)
             # model.ecc.set_info(GIs, args.cuda)
             label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1)
             if args.cuda:
-                edgelist = edgelist.cuda()
-                edge_features = edge_features.cuda()
-                inverse_edge_features = inverse_edge_features.cuda()
-                inverse_edgelist = inverse_edgelist.cuda()
+                batch_graphs = batch_graphs.to(args.device)
                 label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
             else:
                 label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
@@ -224,8 +213,7 @@ def main():
             optimizer.zero_grad()
             t0 = time.time()
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-
-            outputs = model.compgcn(embeddings, edge_features, inverse_edge_features, edgelist, inverse_edgelist)
+            outputs = model.gated_gcn(batch_graphs, embeddings)
             # print('embeddings_size:', embeddings.shape, ' size', clouds_data[1].shape)
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
 
@@ -270,20 +258,17 @@ def main():
         confusion_matrix = metrics.ConfusionMatrix(dbinfo['classes'])
 
         # iterate over dataset in batches
-        for bidx, (targets, edge_features, inverse_edge_features, edgelist, inverse_edgelist, clouds_data) in enumerate(loader):
+        for bidx, (targets, batch_graphs, clouds_data) in enumerate(loader):
             
             label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
             if args.cuda:
-                edgelist = edgelist.cuda()
-                edge_features = edge_features.cuda()
-                inverse_edge_features = inverse_edge_features.cuda()
-                inverse_edgelist = inverse_edgelist.cuda()
+                batch_graphs = batch_graphs.to(args.device)
                 label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
             else:
                 label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
 
             embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-            outputs = model.compgcn(embeddings, edge_features, inverse_edge_features, edgelist, inverse_edgelist)
+            outputs = model.gated_gcn(batch_graphs, embeddings)
             
             loss = nn.functional.cross_entropy(outputs, Variable(label_mode), weight=dbinfo["class_weights"])
             loss_meter.add(loss.item()) 
@@ -311,18 +296,15 @@ def main():
                 if logging.getLogger().getEffectiveLevel() > logging.DEBUG: loader = tqdm(loader, ncols=65)
 
                 # iterate over dataset in batches
-                for bidx, (targets, edge_features, inverse_edge_features, edgelist, inverse_edgelist, clouds_data) in enumerate(loader):
+                for bidx, (targets, batch_graphs, clouds_data) in enumerate(loader):
                     label_mode_cpu, label_vec_cpu, segm_size_cpu = targets[:,0], targets[:,2:], targets[:,1:].sum(1).float()
                     if args.cuda:
-                        edgelist = edgelist.cuda()
-                        edge_features = edge_features.cuda()
-                        inverse_edge_features = inverse_edge_features.cuda()
-                        inverse_edgelist = inverse_edgelist.cuda()
+                        batch_graphs = batch_graphs.to(args.device)
                         label_mode, label_vec, segm_size = label_mode_cpu.cuda(), label_vec_cpu.float().cuda(), segm_size_cpu.float().cuda()
                     else:
                         label_mode, label_vec, segm_size = label_mode_cpu, label_vec_cpu.float(), segm_size_cpu.float()
                     embeddings = ptnCloudEmbedder.run(model, *clouds_data)
-                    outputs = model.compgcn(embeddings, edge_features, inverse_edge_features, edgelist, inverse_edgelist)
+                    outputs = model.gated_gcn(batch_graphs, embeddings)
 
                     fname = clouds_data[0][0][:clouds_data[0][0].rfind('.')]
                     collected[fname].append((outputs.data.cpu().numpy(), label_mode_cpu.cpu().numpy(), label_vec_cpu.cpu().numpy()))
@@ -460,7 +442,7 @@ def create_model(args, dbinfo):
 
     nfeat = args.ptn_widths[1][-1]
     # model.ecc = CompGCN_Classify(args)
-    model.compgcn = CompGCN_Classify(args)
+    model.gated_gcn = GatedGCNNet(args)
     model.ptn = pointnet.PointNet(args.ptn_widths[0], args.ptn_widths[1], args.ptn_widths_stn[0], args.ptn_widths_stn[1], dbinfo['node_feats'], args.ptn_nfeat_stn, prelast_do=args.ptn_prelast_do)
 
     print('Total number of parameters: {}'.format(sum([p.numel() for p in model.parameters()])))

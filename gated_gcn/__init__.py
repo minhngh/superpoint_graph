@@ -1,0 +1,1 @@
+from .gated_gcn_model import GatedGCNNet
