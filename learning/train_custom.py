@@ -125,6 +125,7 @@ def main():
     parser.add_argument('--residual', type = bool, default = True)
     parser.add_argument('--n_classes', type = int, default = 8)
     parser.add_argument('--k-fold', type = int, default = 0)
+    parser.add_argument('-pos-enc-dim', type = int, default = 8)
 
     args = parser.parse_args()
     args.start_epoch = 0
@@ -142,7 +143,7 @@ def main():
     with open(os.path.join(args.odir, 'cmdline.txt'), 'w') as f:
         f.write(" ".join(["'"+a+"'" if (len(a)==0 or a[0]!='-') else a for a in sys.argv]))
 
-    set_seed(args.seed, args.cuda)
+    # set_seed(args.seed, args.cuda)
     logging.getLogger().setLevel(logging.INFO)  #set to logging.DEBUG to allow for more prints
     if (args.dataset=='sema3d' and args.db_test_name.startswith('test')) or (args.dataset.startswith('s3dis_02') and args.cvfold==2):
         # needed in pytorch 0.2 for super-large graphs with batchnorm in fnet  (https://github.com/pytorch/pytorch/pull/2919)
@@ -459,11 +460,12 @@ def create_optimizer(args, model):
 
 def set_seed(seed, cuda=True):
     """ Sets seeds in all frameworks"""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if cuda: 
-        torch.cuda.manual_seed(seed)    
+    # random.seed(seed)
+    # np.random.seed(seed)
+    # torch.manual_seed(seed)
+    # if cuda: 
+    #     torch.cuda.manual_seed(seed)    
+    pass
 
 def filter_valid(output, target, other=None):
     """ Removes predictions for nodes without ground truth """

@@ -2,7 +2,11 @@ import torch
 import torch.nn as nn
 import numpy as np
 from scipy import sparse as sp
-
+try:
+    from cupyx.scipy import sparse as csp
+    import cupy as cp
+except:
+    pass
 from .gated_gcn_layer import GatedGCNLayer
 
 class MLPReadout(nn.Module):
@@ -47,20 +51,31 @@ class GatedGCNNet(nn.Module):
     
     def positional_encoding(self, g, pos_enc_dim):
         n = g.num_nodes()
-        A = g.adj(scipy_fmt = 'coo')
-        N = sp.diags(g.in_degrees().clip(min = 1).numpy() ** -0.5, dtype = float)
-        L = sp.eye(n) - N.dot(A).dot(N)
-        eig_value, eig_vector = np.linalg.eig(L.toarray())
-        idx = eig_value.argsort()
-        eig_value =eig_value[idx]
-        eig_vector = np.real(eig_vector[:, idx])
-        g.ndata['pos_enc'] = torch.Tensor(eig_vector[:, 1 : pos_enc_dim + 1])
+        if str(g.device) == 'cpu':
+            A = g.adj(scipy_fmt = 'coo')
+            N = sp.diags(g.in_degrees().clip(min = 1).numpy() ** -0.5, dtype = float)
+            L = sp.eye(n) - N.dot(A).dot(N)
+            eig_value, eig_vector = np.linalg.eig(L.toarray())
+            idx = eig_value.argsort()
+            eig_value =eig_value[idx]
+            eig_vector = np.real(eig_vector[:, idx])
+            g.ndata['pos_enc'] = torch.Tensor(eig_vector[:, 1 : pos_enc_dim + 1])
+        else:
+            A = csp.coo_matrix(g.adj(scipy_fmt = 'coo'), dtype = float)
+            N = csp.diags(cp.array(g.in_degrees().clip(min = 1).cpu().numpy()) ** -0.5, dtype = float)
+            L = csp.eye(n) - N.dot(A).dot(N)
+            eig_value, eig_vector = cp.linalg.eigh(L.toarray())
+            idx = eig_value.argsort()
+            eig_value =eig_value[idx]
+            eig_vector = cp.real(eig_vector[:, idx])
+            g.ndata['pos_enc'] = torch.Tensor(eig_vector[:, 1 : pos_enc_dim + 1]).to(g.device)
 
     def forward(self, g, h):
-        self.positional_encoding(g, self.pos_enc_dim)
+        if self.training:
+            self.positional_encoding(g, self.pos_enc_dim)
         e = g.edata['f']
         e = self.embedding_e(e)
-        if self.pos_enc_dim:
+        if self.pos_enc_dim and self.training:
             h = h + self.embedding_pos_enc(g.ndata['pos_enc'])
         
         # res gated convnets

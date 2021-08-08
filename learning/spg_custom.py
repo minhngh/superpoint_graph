@@ -18,7 +18,7 @@ import ecc
 import h5py
 from sklearn import preprocessing
 import dgl
-
+import time
 
 
 def spg_edge_features(edges, node_att, edge_att, args):
@@ -126,16 +126,18 @@ def random_neighborhoods(G, num, order):
 
 def k_big_enough(G, minpts, k):
     """ Returns a induced graph on maximum k superpoints of size >= minpts (smaller ones are not counted) """
-    valid = np.array(G.vs['s']) >= minpts
-    n = np.argwhere(np.cumsum(valid)<=k)[-1][0]+1
-    return G.subgraph(range(n))
+    np.random.seed(int(time.time()))
+    valid = np.where(np.array(G.ndata['s']) >= minpts)[0]
+    k = min(valid.shape[0], k)
+    random_nodes = np.random.choice(valid, size = k, replace = False)
+    return G.subgraph(random_nodes)
 
 
 def loader(entry, train, args, db_path, test_seed_offset=0):
     """ Prepares a superpoint graph (potentially subsampled in training) and associated superpoints. """
     G, fname = entry
     # 1) subset (neighborhood) selection of (permuted) superpoint graph
-    # if train:
+    if train:
     #     if 0 < args.spg_augm_hardcutoff < G.num_nodes():
     #         perm = list(range(G.num_nodes())); random.shuffle(perm)
     #         G = G.permute_vertices(perm)
@@ -143,8 +145,8 @@ def loader(entry, train, args, db_path, test_seed_offset=0):
     #     if 0 < args.spg_augm_nneigh < G.vcount():
     #         G = random_neighborhoods(G, args.spg_augm_nneigh, args.spg_augm_order)
 
-    #     if 0 < args.spg_augm_hardcutoff < G.vcount():
-    #         G = k_big_enough(G, args.ptn_minpts, args.spg_augm_hardcutoff)
+        if 0 < args.spg_augm_hardcutoff < G.num_nodes():
+            G = k_big_enough(G, args.ptn_minpts, args.spg_augm_hardcutoff)
 
     # Only stores graph with edges
     if len(G.edges()) != 0:
